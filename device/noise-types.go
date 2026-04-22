@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	NoisePublicKeySize    = 32
-	NoisePrivateKeySize   = 32
+	NoisePublicKeySize    = 64 // bign-curve256v1 public key (l/2 bytes, l=128)
+	NoisePrivateKeySize   = 32 // bign-curve256v1 private key (l/4 bytes, l=128)
 	NoisePresharedKeySize = 32
 )
 
@@ -46,18 +46,11 @@ func (key NoisePrivateKey) Equals(tar NoisePrivateKey) bool {
 }
 
 func (key *NoisePrivateKey) FromHex(src string) (err error) {
-	err = loadExactHex(key[:], src)
-	key.clamp()
-	return
+	return loadExactHex(key[:], src)
 }
 
 func (key *NoisePrivateKey) FromMaybeZeroHex(src string) (err error) {
-	err = loadExactHex(key[:], src)
-	if key.IsZero() {
-		return
-	}
-	key.clamp()
-	return
+	return loadExactHex(key[:], src)
 }
 
 func (key *NoisePublicKey) FromHex(src string) error {

@@ -6,55 +6,40 @@
 package device
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/subtle"
 	"errors"
-	"hash"
 
-	"golang.org/x/crypto/blake2s"
-	"golang.org/x/crypto/curve25519"
+	bee2go "bee2go"
 )
 
 /* KDF related functions.
- * HMAC-based Key Derivation Function (HKDF)
- * https://tools.ietf.org/html/rfc5869
+ * Bash PRG-based Key Derivation Function replacing HKDF-BLAKE2s.
+ * Semantics match RFC 5869 but using bash PRG as the MAC primitive.
  */
 
-func HMAC1(sum *[blake2s.Size]byte, key, in0 []byte) {
-	mac := hmac.New(func() hash.Hash {
-		h, _ := blake2s.New256(nil)
-		return h
-	}, key)
-	mac.Write(in0)
-	mac.Sum(sum[:0])
+func HMAC1(sum *[HashSize]byte, key, in0 []byte) {
+	bashMAC(sum, key, in0)
 }
 
-func HMAC2(sum *[blake2s.Size]byte, key, in0, in1 []byte) {
-	mac := hmac.New(func() hash.Hash {
-		h, _ := blake2s.New256(nil)
-		return h
-	}, key)
-	mac.Write(in0)
-	mac.Write(in1)
-	mac.Sum(sum[:0])
+func HMAC2(sum *[HashSize]byte, key, in0, in1 []byte) {
+	bashMAC(sum, key, in0, in1)
 }
 
-func KDF1(t0 *[blake2s.Size]byte, key, input []byte) {
+func KDF1(t0 *[HashSize]byte, key, input []byte) {
 	HMAC1(t0, key, input)
 	HMAC1(t0, t0[:], []byte{0x1})
 }
 
-func KDF2(t0, t1 *[blake2s.Size]byte, key, input []byte) {
-	var prk [blake2s.Size]byte
+func KDF2(t0, t1 *[HashSize]byte, key, input []byte) {
+	var prk [HashSize]byte
 	HMAC1(&prk, key, input)
 	HMAC1(t0, prk[:], []byte{0x1})
 	HMAC2(t1, prk[:], t0[:], []byte{0x2})
 	setZero(prk[:])
 }
 
-func KDF3(t0, t1, t2 *[blake2s.Size]byte, key, input []byte) {
-	var prk [blake2s.Size]byte
+func KDF3(t0, t1, t2 *[HashSize]byte, key, input []byte) {
+	var prk [HashSize]byte
 	HMAC1(&prk, key, input)
 	HMAC1(t0, prk[:], []byte{0x1})
 	HMAC2(t1, prk[:], t0[:], []byte{0x2})
@@ -77,32 +62,59 @@ func setZero(arr []byte) {
 	}
 }
 
-func (sk *NoisePrivateKey) clamp() {
-	sk[0] &= 248
-	sk[31] = (sk[31] & 127) | 64
-}
-
-func newPrivateKey() (sk NoisePrivateKey, err error) {
-	_, err = rand.Read(sk[:])
-	sk.clamp()
-	return
-}
-
-func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
-	apk := (*[NoisePublicKeySize]byte)(&pk)
-	ask := (*[NoisePrivateKeySize]byte)(sk)
-	curve25519.ScalarBaseMult(apk, ask)
-	return
-}
+// bignCurve256v1OID is the OID for the bign-curve256v1 parameter set (l=128).
+const bignCurve256v1OID = "1.2.112.0.2.0.34.101.45.3.1"
 
 var errInvalidPublicKey = errors.New("invalid public key")
 
+// newPrivateKey generates a new bign private key using bignKeypairGen.
+// The underlying bign library ensures the key is in the valid range.
+func newPrivateKey() (sk NoisePrivateKey, err error) {
+	params, err := bee2go.NewBignParamsStd(bignCurve256v1OID)
+	if err != nil {
+		return sk, err
+	}
+	defer params.Free()
+
+	privKey, _, err := bee2go.BignKeypairGen(params)
+	if err != nil {
+		return sk, err
+	}
+	copy(sk[:], privKey)
+	return sk, nil
+}
+
+// publicKey derives the bign public key from the private key.
+func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
+	params, err := bee2go.NewBignParamsStd(bignCurve256v1OID)
+	if err != nil {
+		panic("bee2: publicKey: " + err.Error())
+	}
+	defer params.Free()
+
+	pubKey, err := bee2go.BignPubkeyCalc(params, sk[:])
+	if err != nil {
+		panic("bee2: publicKey: " + err.Error())
+	}
+	copy(pk[:], pubKey)
+	return pk
+}
+
+// sharedSecret computes the bign Diffie-Hellman shared secret.
 func (sk *NoisePrivateKey) sharedSecret(pk NoisePublicKey) (ss [NoisePublicKeySize]byte, err error) {
-	apk := (*[NoisePublicKeySize]byte)(&pk)
-	ask := (*[NoisePrivateKeySize]byte)(sk)
-	curve25519.ScalarMult(&ss, ask, apk)
-	if isZero(ss[:]) {
+	params, err := bee2go.NewBignParamsStd(bignCurve256v1OID)
+	if err != nil {
 		return ss, errInvalidPublicKey
 	}
+	defer params.Free()
+
+	shared, err := bee2go.BignDH(params, sk[:], pk[:], NoisePublicKeySize)
+	if err != nil {
+		return ss, errInvalidPublicKey
+	}
+	if isZero(shared) {
+		return ss, errInvalidPublicKey
+	}
+	copy(ss[:], shared)
 	return ss, nil
 }

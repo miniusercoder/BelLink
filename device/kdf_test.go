@@ -8,8 +8,6 @@ package device
 import (
 	"encoding/hex"
 	"testing"
-
-	"golang.org/x/crypto/blake2s"
 )
 
 type KDFTest struct {
@@ -31,27 +29,27 @@ func TestKDF(t *testing.T) {
 		{
 			key:   "746573742d6b6579",
 			input: "746573742d696e707574",
-			t0:    "6f0e5ad38daba1bea8a0d213688736f19763239305e0f58aba697f9ffc41c633",
-			t1:    "df1194df20802a4fe594cde27e92991c8cae66c366e8106aaa937a55fa371e8a",
-			t2:    "fac6e2745a325f5dc5d11a5b165aad08b0ada28e7b4e666b7c077934a4d76c24",
+			t0:    "dbfad6f8e6d22e7f321e5fe7d0ebd4815aff27f53cbc22a7d136d5465516fd38",
+			t1:    "a1c948e33a09f916f249d665eff13d7313700e5dc407bb56a503d54daa9e29a9",
+			t2:    "e14eadd9c68a95706d6960e0003e53ba4f25cd534aba97e136f0e9e458e1a359",
 		},
 		{
 			key:   "776972656775617264",
 			input: "776972656775617264",
-			t0:    "491d43bbfdaa8750aaf535e334ecbfe5129967cd64635101c566d4caefda96e8",
-			t1:    "1e71a379baefd8a79aa4662212fcafe19a23e2b609a3db7d6bcba8f560e3d25f",
-			t2:    "31e1ae48bddfbe5de38f295e5452b1909a1b4e38e183926af3780b0c1e1f0160",
+			t0:    "46eb98d746a5757ae8e40dae2e33d0094c1d52f9958fdddcd28a889d4de4c43d",
+			t1:    "08ea31d49914891eafa5aa361e6fdee42bdde3fbfd5e885cb237b70bc8afa183",
+			t2:    "3c05f9102adf94c836944730aff56d59f53cdaeb4cfa9f3e2ca165976e1b2adb",
 		},
 		{
 			key:   "",
 			input: "",
-			t0:    "8387b46bf43eccfcf349552a095d8315c4055beb90208fb1be23b894bc2ed5d0",
-			t1:    "58a0e5f6faefccf4807bff1f05fa8a9217945762040bcec2f4b4a62bdfe0e86e",
-			t2:    "0ce6ea98ec548f8e281e93e32db65621c45eb18dc6f0a7ad94178610a2f7338e",
+			t0:    "11e4d34017a98cbd37a32028858d73410274a3ae2be8155b5ba1772a69a39064",
+			t1:    "25e91f2a6ff3be9cba39c399c301e9d8a3f796019b03a29289eda82d83f401ad",
+			t2:    "694d46f46a82b5a070ab8c747387703441317cfa1fee0ae8d4b2a591a0fbe3dc",
 		},
 	}
 
-	var t0, t1, t2 [blake2s.Size]byte
+	var t0, t1, t2 [HashSize]byte
 
 	for _, test := range tests {
 		key, _ := hex.DecodeString(test.key)
