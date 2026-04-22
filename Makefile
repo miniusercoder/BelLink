@@ -16,16 +16,23 @@ generate-version-and-build:
 	git update-index --assume-unchanged version.go || true
 	@$(MAKE) wireguard-go
 
-wireguard-go: $(wildcard *.go) $(wildcard */*.go)
+bee2-lib:
+	@echo "Building bee2 static library..."
+	@mkdir -p bee2/build
+	@cd bee2/build && cmake -DBUILD_SHARED_LIBS=OFF -DBUILD_PIC=ON -DBUILD_CMD=OFF -DBUILD_TESTS=OFF -DBUILD_DOC=OFF ..
+	@$(MAKE) -C bee2/build -j4
+
+wireguard-go: bee2-lib $(wildcard *.go) $(wildcard */*.go)
 	go build -v -o "$@"
 
 install: wireguard-go
 	@install -v -d "$(DESTDIR)$(BINDIR)" && install -v -m 0755 "$<" "$(DESTDIR)$(BINDIR)/wireguard-go"
 
-test:
+test: bee2-lib
 	go test ./...
 
 clean:
 	rm -f wireguard-go
+	rm -rf bee2/build
 
 .PHONY: all clean test install generate-version-and-build
