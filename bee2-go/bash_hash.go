@@ -19,28 +19,21 @@ type bashHash struct {
 	l     int
 }
 
-// NewBashHash returns a hash.Hash computing the bash hash.
-// l parameter must be 128, 192, or 256.
+// NewBashHash returns a hash.Hash computing bash hash at security level l.
+// l must be 128, 192, or 256; the digest size is l/4 bytes (e.g. 32 bytes for l=128).
 func NewBashHash(l int) (hash.Hash, error) {
 	if l != 128 && l != 192 && l != 256 {
-		return nil, errors.New("invalid l parameter: must be 128, 192, or 256")
+		return nil, errors.New("bee2: security level l must be 128, 192, or 256")
 	}
-
-	stateSize := int(C.bashHash_keep())
-	state := C.malloc(C.size_t(stateSize))
+	state := C.malloc(C.size_t(C.bashHash_keep()))
 	if state == nil {
-		return nil, errors.New("failed to allocate memory for bashHash state")
+		return nil, errors.New("bee2: failed to allocate bashHash state")
 	}
-
 	C.bashHashStart(state, C.size_t(l))
-
-	return &bashHash{
-		state: state,
-		l:     l,
-	}, nil
+	return &bashHash{state: state, l: l}, nil
 }
 
-func (h *bashHash) Write(p []byte) (n int, err error) {
+func (h *bashHash) Write(p []byte) (int, error) {
 	if len(p) > 0 {
 		C.bashHashStepH(unsafe.Pointer(&p[0]), C.size_t(len(p)), h.state)
 	}
@@ -50,20 +43,17 @@ func (h *bashHash) Write(p []byte) (n int, err error) {
 func (h *bashHash) Sum(b []byte) []byte {
 	hashLen := h.l / 4
 	out := make([]byte, hashLen)
-	
-	// According to documentation, StepG does not allow continuation if buffer intersects.
-	// We can use a temporary copy of the state to allow Sum() to be called multiple times.
-	stateSize := int(C.bashHash_keep())
-	tempState := C.malloc(C.size_t(stateSize))
-	if tempState == nil {
-		panic("failed to allocate memory for temporary bashHash state")
-	}
-	defer C.free(tempState)
 
-	C.memcpy(tempState, h.state, C.size_t(stateSize))
-	
-	C.bashHashStepG((*C.uint8_t)(unsafe.Pointer(&out[0])), C.size_t(hashLen), tempState)
-	
+	// Copy state so Sum can be called multiple times without consuming it.
+	stateSize := C.size_t(C.bashHash_keep())
+	tmp := C.malloc(stateSize)
+	if tmp == nil {
+		panic("bee2: failed to allocate temporary bashHash state")
+	}
+	defer C.free(tmp)
+	C.memcpy(tmp, h.state, stateSize)
+
+	C.bashHashStepG((*C.octet)(unsafe.Pointer(&out[0])), C.size_t(hashLen), tmp)
 	return append(b, out...)
 }
 
@@ -71,17 +61,17 @@ func (h *bashHash) Reset() {
 	C.bashHashStart(h.state, C.size_t(h.l))
 }
 
+// Size returns the digest size in bytes (l/4).
 func (h *bashHash) Size() int {
 	return h.l / 4
 }
 
+// BlockSize returns the sponge rate in bytes ((1536 - 2*l) / 8).
 func (h *bashHash) BlockSize() int {
-	// 24 for l=128, 48 for l=256 etc, typical for sponge, but let's return a safe value
-	// actually standard says capacity is 2l, bit rate is 1536 - 2l
 	return (1536 - 2*h.l) / 8
 }
 
-// Free should be called to free the underlying C memory
+// Free releases the underlying C state. Must be called when the hash is no longer needed.
 func (h *bashHash) Free() {
 	if h.state != nil {
 		C.free(h.state)
@@ -89,13 +79,16 @@ func (h *bashHash) Free() {
 	}
 }
 
-// BashHash is a helper wrapper for one-shot hashing.
+// BashHash computes the bash hash of src at security level l in a single call.
+// l must be 128, 192, or 256.
 func BashHash(l int, src []byte) ([]byte, error) {
 	h, err := NewBashHash(l)
 	if err != nil {
 		return nil, err
 	}
 	defer h.(*bashHash).Free()
-	h.Write(src)
+	if _, err := h.Write(src); err != nil {
+		return nil, err
+	}
 	return h.Sum(nil), nil
 }
