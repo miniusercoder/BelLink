@@ -1,3 +1,3 @@
-[submodule "bee2"]
-	path = bee2
-	url = https://github.com/agievich/bee2.git
+[submodule "bee2go"]
+	path = bee2go
+	url = https://github.com/miniusercoder/bee2go

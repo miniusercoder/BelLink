@@ -9,7 +9,7 @@ import (
 	"crypto/subtle"
 	"errors"
 
-	bee2go "bee2go"
+	"github.com/miniusercoder/bee2go"
 )
 
 /* KDF related functions.

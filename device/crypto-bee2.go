@@ -10,7 +10,7 @@ import (
 	"crypto/subtle"
 	"errors"
 
-	bee2go "bee2go"
+	"github.com/miniusercoder/bee2go"
 )
 
 // Size constants for bee2-based primitives.
